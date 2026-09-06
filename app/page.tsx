@@ -706,7 +706,13 @@ export default function Home() {
                     onChange={(e) =>
                       setName(e.target.value)
                     }
-                    className="w-full rounded-xl border border-gray-200 bg-white p-4 text-gray-900 placeholder:text-gray-400 outline-none focus:border-black"
+                    autoComplete="name"
+                    style={{
+                      color: "#000000",
+                      backgroundColor: "#ffffff",
+                      WebkitTextFillColor: "#000000",
+                    }}
+                    className="w-full rounded-xl border border-gray-300 bg-white p-4 text-base font-medium !text-black placeholder:!text-gray-500 outline-none focus:border-black"
                   />
 
                   <input
@@ -716,7 +722,13 @@ export default function Home() {
                     onChange={(e) =>
                       setPhone(e.target.value)
                     }
-                    className="w-full rounded-xl border border-gray-200 bg-white p-4 text-gray-900 placeholder:text-gray-400 outline-none focus:border-black"
+                    autoComplete="tel"
+                    style={{
+                      color: "#000000",
+                      backgroundColor: "#ffffff",
+                      WebkitTextFillColor: "#000000",
+                    }}
+                    className="w-full rounded-xl border border-gray-300 bg-white p-4 text-base font-medium !text-black placeholder:!text-gray-500 outline-none focus:border-black"
                   />
                 </div>
               </div>

@@ -34,8 +34,7 @@ const SLOT_MINUTES = 60;
 export default function Home() {
   const [selectedService, setSelectedService] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
-  const [selectedTime, setSelectedTime] =
-    useState<TimeSlot | null>(null);
+  const [selectedTime, setSelectedTime] = useState<TimeSlot | null>(null);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -45,11 +44,8 @@ export default function Home() {
   const [confirmation, setConfirmation] =
     useState<Confirmation | null>(null);
 
-  const [reservations, setReservations] =
-    useState<Reservation[]>([]);
-
-  const [businessHours, setBusinessHours] =
-    useState<BusinessHour[]>([]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [businessHours, setBusinessHours] = useState<BusinessHour[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -61,22 +57,21 @@ export default function Home() {
   async function loadData() {
     setLoading(true);
 
-    const [reservationsResult, hoursResult] =
-      await Promise.all([
-        supabase
-          .from("reservations")
-          .select("id, appointment_time")
-          .order("appointment_time", {
-            ascending: true,
-          }),
+    const [reservationsResult, hoursResult] = await Promise.all([
+      supabase
+        .from("reservations")
+        .select("id, appointment_time")
+        .order("appointment_time", {
+          ascending: true,
+        }),
 
-        supabase
-          .from("business_hours")
-          .select("*")
-          .order("day_of_week", {
-            ascending: true,
-          }),
-      ]);
+      supabase
+        .from("business_hours")
+        .select("*")
+        .order("day_of_week", {
+          ascending: true,
+        }),
+    ]);
 
     if (reservationsResult.error) {
       console.error(
@@ -84,9 +79,7 @@ export default function Home() {
         reservationsResult.error
       );
     } else {
-      setReservations(
-        reservationsResult.data || []
-      );
+      setReservations(reservationsResult.data || []);
     }
 
     if (hoursResult.error) {
@@ -95,41 +88,26 @@ export default function Home() {
         hoursResult.error
       );
     } else {
-      setBusinessHours(
-        hoursResult.data || []
-      );
+      setBusinessHours(hoursResult.data || []);
     }
 
     setLoading(false);
   }
 
   function normalizeDateTime(value: string) {
-    return value
-      .replace("T", " ")
-      .substring(0, 16);
+    return value.replace("T", " ").substring(0, 16);
   }
 
   function formatDateKey(date: Date) {
     const year = date.getFullYear();
-
-    const month = String(
-      date.getMonth() + 1
-    ).padStart(2, "0");
-
-    const day = String(
-      date.getDate()
-    ).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
 
     return `${year}-${month}-${day}`;
   }
 
-  function formatDisplayDate(
-    dateValue: string
-  ) {
-    const [year, month, day] =
-      dateValue
-        .split("-")
-        .map(Number);
+  function formatDisplayDate(dateValue: string) {
+    const [year, month, day] = dateValue.split("-").map(Number);
 
     return new Date(
       year,
@@ -138,24 +116,16 @@ export default function Home() {
       12,
       0,
       0
-    ).toLocaleDateString(
-      "sk-SK",
-      {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }
-    );
+    ).toLocaleDateString("sk-SK", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
   }
 
-  function getBusinessDayNumber(
-    dateValue: string
-  ) {
-    const [year, month, day] =
-      dateValue
-        .split("-")
-        .map(Number);
+  function getBusinessDayNumber(dateValue: string) {
+    const [year, month, day] = dateValue.split("-").map(Number);
 
     const jsDay = new Date(
       year,
@@ -166,240 +136,132 @@ export default function Home() {
       0
     ).getDay();
 
-    return jsDay === 0
-      ? 7
-      : jsDay;
+    return jsDay === 0 ? 7 : jsDay;
   }
 
-  function timeToMinutes(
-    value: string
-  ) {
-    const [hours, minutes] =
-      value
-        .substring(0, 5)
-        .split(":")
-        .map(Number);
+  function timeToMinutes(value: string) {
+    const [hours, minutes] = value
+      .substring(0, 5)
+      .split(":")
+      .map(Number);
 
-    return (
-      hours * 60 +
-      minutes
-    );
+    return hours * 60 + minutes;
   }
 
-  function minutesToTime(
-    totalMinutes: number
-  ) {
-    const hours =
-      Math.floor(
-        totalMinutes / 60
-      );
+  function minutesToTime(totalMinutes: number) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
 
-    const minutes =
-      totalMinutes % 60;
-
-    return `${String(
-      hours
-    ).padStart(
-      2,
-      "0"
-    )}:${String(
-      minutes
-    ).padStart(
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
       2,
       "0"
     )}`;
   }
 
-  function createAppointmentValue(
-    date: string,
-    time: string
-  ) {
+  function createAppointmentValue(date: string, time: string) {
     return `${date} ${time}:00`;
   }
 
-  function isTimeTaken(
-    time: TimeSlot
-  ) {
-    const wantedTime =
-      normalizeDateTime(
-        time.value
-      );
+  function isTimeTaken(time: TimeSlot) {
+    const wantedTime = normalizeDateTime(time.value);
 
     return reservations.some(
       (reservation) =>
-        normalizeDateTime(
-          reservation.appointment_time
-        ) === wantedTime
+        normalizeDateTime(reservation.appointment_time) === wantedTime
     );
   }
 
-  function isTimeInPast(
-    time: TimeSlot
-  ) {
-    const normalized =
-      normalizeDateTime(
-        time.value
-      );
+  function isTimeInPast(time: TimeSlot) {
+    const normalized = normalizeDateTime(time.value);
+    const [datePart, timePart] = normalized.split(" ");
 
-    const [
-      datePart,
-      timePart,
-    ] = normalized.split(" ");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute] = timePart.split(":").map(Number);
 
-    const [
+    const appointmentDate = new Date(
       year,
-      month,
+      month - 1,
       day,
-    ] = datePart
-      .split("-")
-      .map(Number);
-
-    const [
       hour,
-      minute,
-    ] = timePart
-      .split(":")
-      .map(Number);
-
-    const appointmentDate =
-      new Date(
-        year,
-        month - 1,
-        day,
-        hour,
-        minute
-      );
-
-    return (
-      appointmentDate.getTime() <=
-      Date.now()
+      minute
     );
+
+    return appointmentDate.getTime() <= Date.now();
   }
 
-  function getBusinessHourForDate(
-    dateValue: string
-  ) {
+  function getBusinessHourForDate(dateValue: string) {
     if (!dateValue) {
       return null;
     }
 
-    const dayNumber =
-      getBusinessDayNumber(
-        dateValue
-      );
+    const dayNumber = getBusinessDayNumber(dateValue);
 
     return (
       businessHours.find(
-        (item) =>
-          Number(
-            item.day_of_week
-          ) === dayNumber
+        (item) => Number(item.day_of_week) === dayNumber
       ) || null
     );
   }
 
-  const selectedBusinessHour =
-    useMemo(() => {
-      return getBusinessHourForDate(
-        selectedDate
-      );
-    }, [
-      selectedDate,
-      businessHours,
-    ]);
+  const selectedBusinessHour = useMemo(() => {
+    return getBusinessHourForDate(selectedDate);
+  }, [selectedDate, businessHours]);
 
-  const availableSlots =
-    useMemo(() => {
-      if (!selectedDate) {
-        return [];
+  const availableSlots = useMemo(() => {
+    if (!selectedDate) {
+      return [];
+    }
+
+    if (!selectedBusinessHour) {
+      return [];
+    }
+
+    if (selectedBusinessHour.is_open !== true) {
+      return [];
+    }
+
+    if (
+      !selectedBusinessHour.open_time ||
+      !selectedBusinessHour.close_time
+    ) {
+      return [];
+    }
+
+    const startMinutes = timeToMinutes(
+      selectedBusinessHour.open_time
+    );
+
+    const endMinutes = timeToMinutes(
+      selectedBusinessHour.close_time
+    );
+
+    const slots: TimeSlot[] = [];
+
+    for (
+      let current = startMinutes;
+      current < endMinutes;
+      current += SLOT_MINUTES
+    ) {
+      const time = minutesToTime(current);
+
+      const slot: TimeSlot = {
+        label: time,
+        value: createAppointmentValue(selectedDate, time),
+      };
+
+      if (!isTimeTaken(slot) && !isTimeInPast(slot)) {
+        slots.push(slot);
       }
+    }
 
-      if (
-        !selectedBusinessHour
-      ) {
-        return [];
-      }
+    return slots;
+  }, [selectedDate, selectedBusinessHour, reservations]);
 
-      if (
-        selectedBusinessHour.is_open !==
-        true
-      ) {
-        return [];
-      }
+  const today = useMemo(() => {
+    return formatDateKey(new Date());
+  }, []);
 
-      if (
-        !selectedBusinessHour.open_time ||
-        !selectedBusinessHour.close_time
-      ) {
-        return [];
-      }
-
-      const startMinutes =
-        timeToMinutes(
-          selectedBusinessHour.open_time
-        );
-
-      const endMinutes =
-        timeToMinutes(
-          selectedBusinessHour.close_time
-        );
-
-      const slots: TimeSlot[] =
-        [];
-
-      for (
-        let current =
-          startMinutes;
-        current <
-        endMinutes;
-        current +=
-          SLOT_MINUTES
-      ) {
-        const time =
-          minutesToTime(
-            current
-          );
-
-        const slot: TimeSlot = {
-          label: time,
-          value:
-            createAppointmentValue(
-              selectedDate,
-              time
-            ),
-        };
-
-        if (
-          !isTimeTaken(
-            slot
-          ) &&
-          !isTimeInPast(
-            slot
-          )
-        ) {
-          slots.push(
-            slot
-          );
-        }
-      }
-
-      return slots;
-    }, [
-      selectedDate,
-      selectedBusinessHour,
-      reservations,
-    ]);
-
-  const today =
-    useMemo(() => {
-      return formatDateKey(
-        new Date()
-      );
-    }, []);
-
-  function handleDateChange(
-    dateValue: string
-  ) {
+  function handleDateChange(dateValue: string) {
     setSelectedTime(null);
     setMessage("");
 
@@ -408,10 +270,7 @@ export default function Home() {
       return;
     }
 
-    const businessDay =
-      getBusinessHourForDate(
-        dateValue
-      );
+    const businessDay = getBusinessHourForDate(dateValue);
 
     if (!businessDay) {
       setSelectedDate("");
@@ -423,10 +282,7 @@ export default function Home() {
       return;
     }
 
-    if (
-      businessDay.is_open !==
-      true
-    ) {
+    if (businessDay.is_open !== true) {
       setSelectedDate("");
 
       setMessage(
@@ -436,99 +292,64 @@ export default function Home() {
       return;
     }
 
-    setSelectedDate(
-      dateValue
-    );
+    setSelectedDate(dateValue);
   }
 
   async function createReservation() {
     setMessage("");
 
-    if (
-      !selectedService
-    ) {
-      setMessage(
-        "Vyberte službu."
-      );
+    if (!selectedService) {
+      setMessage("Vyberte službu.");
       return;
     }
 
     if (!selectedDate) {
-      setMessage(
-        "Vyberte dátum."
-      );
+      setMessage("Vyberte dátum.");
       return;
     }
 
-    if (
-      !selectedBusinessHour
-    ) {
+    if (!selectedBusinessHour) {
       setMessage(
         "Pre tento deň nie sú nastavené pracovné hodiny."
       );
       return;
     }
 
-    if (
-      selectedBusinessHour.is_open !==
-      true
-    ) {
-      setMessage(
-        "V tento deň je kaderníctvo zatvorené."
-      );
+    if (selectedBusinessHour.is_open !== true) {
+      setMessage("V tento deň je kaderníctvo zatvorené.");
       return;
     }
 
     if (!selectedTime) {
-      setMessage(
-        "Vyberte čas."
-      );
+      setMessage("Vyberte čas.");
       return;
     }
 
     if (!name.trim()) {
-      setMessage(
-        "Zadajte meno."
-      );
+      setMessage("Zadajte meno.");
       return;
     }
 
     if (!phone.trim()) {
-      setMessage(
-        "Zadajte telefón."
-      );
+      setMessage("Zadajte telefón.");
       return;
     }
 
     setSaving(true);
 
-    const dayNumber =
-      getBusinessDayNumber(
-        selectedDate
-      );
+    const dayNumber = getBusinessDayNumber(selectedDate);
 
     const {
-      data:
-        latestBusinessHour,
-      error:
-        businessHourError,
+      data: latestBusinessHour,
+      error: businessHourError,
     } = await supabase
-      .from(
-        "business_hours"
-      )
+      .from("business_hours")
       .select("*")
-      .eq(
-        "day_of_week",
-        dayNumber
-      )
+      .eq("day_of_week", dayNumber)
       .maybeSingle();
 
-    if (
-      businessHourError
-    ) {
-      console.error(
-        businessHourError
-      );
+    if (businessHourError) {
+      console.error(businessHourError);
 
       setMessage(
         "Nepodarilo sa skontrolovať pracovné hodiny."
@@ -538,9 +359,7 @@ export default function Home() {
       return;
     }
 
-    if (
-      !latestBusinessHour
-    ) {
+    if (!latestBusinessHour) {
       setMessage(
         "Pre tento deň nie sú nastavené pracovné hodiny."
       );
@@ -549,10 +368,7 @@ export default function Home() {
       return;
     }
 
-    if (
-      latestBusinessHour.is_open !==
-      true
-    ) {
+    if (latestBusinessHour.is_open !== true) {
       setSelectedDate("");
       setSelectedTime(null);
 
@@ -567,26 +383,17 @@ export default function Home() {
     }
 
     const {
-      data:
-        latestReservations,
-      error:
-        loadError,
+      data: latestReservations,
+      error: loadError,
     } = await supabase
       .from("reservations")
-      .select(
-        "id, appointment_time"
-      )
-      .order(
-        "appointment_time",
-        {
-          ascending: true,
-        }
-      );
+      .select("id, appointment_time")
+      .order("appointment_time", {
+        ascending: true,
+      });
 
     if (loadError) {
-      console.error(
-        loadError
-      );
+      console.error(loadError);
 
       setMessage(
         "Nepodarilo sa skontrolovať termín."
@@ -596,32 +403,19 @@ export default function Home() {
       return;
     }
 
-    const wantedTime =
-      normalizeDateTime(
-        selectedTime.value
-      );
+    const wantedTime = normalizeDateTime(
+      selectedTime.value
+    );
 
-    const alreadyTaken =
-      (
-        latestReservations ||
-        []
-      ).some(
-        (reservation) =>
-          normalizeDateTime(
-            reservation.appointment_time
-          ) ===
-          wantedTime
-      );
+    const alreadyTaken = (latestReservations || []).some(
+      (reservation) =>
+        normalizeDateTime(reservation.appointment_time) ===
+        wantedTime
+    );
 
     if (alreadyTaken) {
-      setReservations(
-        latestReservations ||
-          []
-      );
-
-      setSelectedTime(
-        null
-      );
+      setReservations(latestReservations || []);
+      setSelectedTime(null);
 
       setMessage(
         "Tento termín už nie je dostupný."
@@ -631,36 +425,23 @@ export default function Home() {
       return;
     }
 
-    const confirmationData: Confirmation =
-      {
-        name: name.trim(),
-        service:
-          selectedService,
-        date: selectedDate,
-        time:
-          selectedTime.label,
-      };
+    const confirmationData: Confirmation = {
+      name: name.trim(),
+      service: selectedService,
+      date: selectedDate,
+      time: selectedTime.label,
+    };
 
-    const { error } =
-      await supabase
-        .from(
-          "reservations"
-        )
-        .insert([
-          {
-            customer_name:
-              name.trim(),
-
-            customer_phone:
-              phone.trim(),
-
-            service:
-              selectedService,
-
-            appointment_time:
-              selectedTime.value,
-          },
-        ]);
+    const { error } = await supabase
+      .from("reservations")
+      .insert([
+        {
+          customer_name: name.trim(),
+          customer_phone: phone.trim(),
+          service: selectedService,
+          appointment_time: selectedTime.value,
+        },
+      ]);
 
     if (error) {
       console.error(
@@ -668,20 +449,14 @@ export default function Home() {
         error
       );
 
-      if (
-        error.code ===
-        "23505"
-      ) {
+      if (error.code === "23505") {
         setMessage(
           "Tento termín už nie je dostupný."
         );
 
         await loadData();
 
-        setSelectedTime(
-          null
-        );
-
+        setSelectedTime(null);
         setSaving(false);
 
         return;
@@ -695,9 +470,7 @@ export default function Home() {
       return;
     }
 
-    setConfirmation(
-      confirmationData
-    );
+    setConfirmation(confirmationData);
 
     setMessage("");
 
@@ -725,14 +498,10 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-8">
       <div className="mx-auto max-w-xl">
-
         <div className="rounded-2xl bg-white p-6 shadow-sm">
-
           {confirmation ? (
             <div className="py-4">
-
               <div className="text-center">
-
                 <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-4xl">
                   ✅
                 </div>
@@ -744,11 +513,9 @@ export default function Home() {
                 <p className="mt-2 text-gray-500">
                   Vaša rezervácia bola úspešne vytvorená.
                 </p>
-
               </div>
 
               <div className="mt-8 rounded-2xl bg-gray-50 p-5">
-
                 <div className="border-b border-gray-200 py-3">
                   <div className="text-sm text-gray-500">
                     Meno
@@ -775,9 +542,7 @@ export default function Home() {
                   </div>
 
                   <div className="mt-1 font-bold capitalize text-gray-900">
-                    {formatDisplayDate(
-                      confirmation.date
-                    )}
+                    {formatDisplayDate(confirmation.date)}
                   </div>
                 </div>
 
@@ -790,7 +555,6 @@ export default function Home() {
                     {confirmation.time}
                   </div>
                 </div>
-
               </div>
 
               <div className="mt-6 rounded-xl bg-green-50 p-4 text-center text-green-800">
@@ -805,14 +569,11 @@ export default function Home() {
 
               <button
                 type="button"
-                onClick={
-                  createAnotherReservation
-                }
+                onClick={createAnotherReservation}
                 className="mt-6 w-full rounded-xl bg-black p-4 font-bold text-white transition hover:bg-gray-800"
               >
                 Vytvoriť ďalšiu rezerváciu
               </button>
-
             </div>
           ) : (
             <>
@@ -825,53 +586,36 @@ export default function Home() {
               </p>
 
               <div className="mt-8">
-
                 <h2 className="text-lg font-bold text-gray-900">
                   1. Vyberte službu
                 </h2>
 
                 <div className="mt-4 grid gap-3">
-
                   {[
                     "Strih",
                     "Strih + brada",
                     "Farbenie",
-                  ].map(
-                    (
-                      service
-                    ) => (
-                      <button
-                        key={
-                          service
-                        }
-                        type="button"
-                        onClick={() => {
-                          setSelectedService(
-                            service
-                          );
-                          setMessage(
-                            ""
-                          );
-                        }}
-                        className={`rounded-xl border p-4 text-left font-semibold transition ${
-                          selectedService ===
-                          service
-                            ? "border-black bg-black text-white"
-                            : "border-gray-200 bg-white text-gray-900 hover:bg-gray-100"
-                        }`}
-                      >
-                        {
-                          service
-                        }
-                      </button>
-                    )
-                  )}
-
+                  ].map((service) => (
+                    <button
+                      key={service}
+                      type="button"
+                      onClick={() => {
+                        setSelectedService(service);
+                        setMessage("");
+                      }}
+                      className={`rounded-xl border p-4 text-left font-semibold transition ${
+                        selectedService === service
+                          ? "border-black bg-black text-white"
+                          : "border-gray-200 bg-white text-gray-900 hover:bg-gray-100"
+                      }`}
+                    >
+                      {service}
+                    </button>
+                  ))}
                 </div>
               </div>
 
               <div className="mt-8">
-
                 <h2 className="text-lg font-bold text-gray-900">
                   2. Vyberte dátum
                 </h2>
@@ -879,27 +623,17 @@ export default function Home() {
                 <input
                   type="date"
                   min={today}
-                  value={
-                    selectedDate
+                  value={selectedDate}
+                  disabled={loading}
+                  onChange={(e) =>
+                    handleDateChange(e.target.value)
                   }
-                  disabled={
-                    loading
-                  }
-                  onChange={(
-                    e
-                  ) =>
-                    handleDateChange(
-                      e.target.value
-                    )
-                  }
-                  className="mt-4 w-full rounded-xl border border-gray-200 p-4 text-gray-900 outline-none focus:border-black disabled:bg-gray-100"
+                  className="mt-4 w-full rounded-xl border border-gray-200 bg-white p-4 text-gray-900 outline-none focus:border-black disabled:bg-gray-100"
                 />
-
               </div>
 
               {selectedDate && (
                 <div className="mt-8">
-
                   <h2 className="text-lg font-bold text-gray-900">
                     3. Vyberte čas
                   </h2>
@@ -912,13 +646,11 @@ export default function Home() {
                     <div className="mt-4 rounded-xl bg-gray-100 p-4 text-center font-semibold text-gray-600">
                       Pre tento deň nie sú nastavené pracovné hodiny.
                     </div>
-                  ) : selectedBusinessHour.is_open !==
-                    true ? (
+                  ) : selectedBusinessHour.is_open !== true ? (
                     <div className="mt-4 rounded-xl bg-red-50 p-4 text-center font-semibold text-red-700">
                       V tento deň je kaderníctvo zatvorené.
                     </div>
-                  ) : availableSlots.length ===
-                    0 ? (
+                  ) : availableSlots.length === 0 ? (
                     <div className="mt-4 rounded-xl bg-gray-100 p-4 text-center font-semibold text-gray-600">
                       Na tento deň už nie sú voľné termíny.
                     </div>
@@ -938,102 +670,67 @@ export default function Home() {
                       </p>
 
                       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-
-                        {availableSlots.map(
-                          (
-                            time
-                          ) => (
-                            <button
-                              key={
-                                time.value
-                              }
-                              type="button"
-                              onClick={() => {
-                                setSelectedTime(
-                                  time
-                                );
-
-                                setMessage(
-                                  ""
-                                );
-                              }}
-                              className={`rounded-xl p-4 text-center font-semibold transition ${
-                                selectedTime?.value ===
-                                time.value
-                                  ? "bg-black text-white"
-                                  : "bg-gray-100 text-gray-900 hover:bg-gray-200"
-                              }`}
-                            >
-                              {
-                                time.label
-                              }
-                            </button>
-                          )
-                        )}
-
+                        {availableSlots.map((time) => (
+                          <button
+                            key={time.value}
+                            type="button"
+                            onClick={() => {
+                              setSelectedTime(time);
+                              setMessage("");
+                            }}
+                            className={`rounded-xl p-4 text-center font-semibold transition ${
+                              selectedTime?.value === time.value
+                                ? "bg-black text-white"
+                                : "bg-gray-100 text-gray-900 hover:bg-gray-200"
+                            }`}
+                          >
+                            {time.label}
+                          </button>
+                        ))}
                       </div>
                     </>
                   )}
-
                 </div>
               )}
 
               <div className="mt-8">
-
                 <h2 className="text-lg font-bold text-gray-900">
                   4. Vaše údaje
                 </h2>
 
                 <div className="mt-4 space-y-3">
-
                   <input
                     type="text"
                     placeholder="Meno"
-                    value={
-                      name
+                    value={name}
+                    onChange={(e) =>
+                      setName(e.target.value)
                     }
-                    onChange={(
-                      e
-                    ) =>
-                      setName(
-                        e.target.value
-                      )
-                    }
-                    className="w-full rounded-xl border border-gray-200 p-4 outline-none focus:border-black"
+                    className="w-full rounded-xl border border-gray-200 bg-white p-4 text-gray-900 placeholder:text-gray-400 outline-none focus:border-black"
                   />
 
                   <input
                     type="tel"
                     placeholder="Telefón"
-                    value={
-                      phone
+                    value={phone}
+                    onChange={(e) =>
+                      setPhone(e.target.value)
                     }
-                    onChange={(
-                      e
-                    ) =>
-                      setPhone(
-                        e.target.value
-                      )
-                    }
-                    className="w-full rounded-xl border border-gray-200 p-4 outline-none focus:border-black"
+                    className="w-full rounded-xl border border-gray-200 bg-white p-4 text-gray-900 placeholder:text-gray-400 outline-none focus:border-black"
                   />
-
                 </div>
               </div>
 
               <button
                 type="button"
-                onClick={
-                  createReservation
-                }
+                onClick={createReservation}
                 disabled={
                   saving ||
                   loading ||
                   !selectedDate ||
                   !selectedTime ||
                   !selectedBusinessHour ||
-                  selectedBusinessHour.is_open !==
-                    true
+                  selectedBusinessHour.is_open !== true
                 }
                 className="mt-6 w-full rounded-xl bg-black p-4 font-bold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
               >
@@ -1047,10 +744,8 @@ export default function Home() {
                   {message}
                 </div>
               )}
-
             </>
           )}
-
         </div>
       </div>
     </main>

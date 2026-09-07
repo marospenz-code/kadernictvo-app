@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -15,15 +11,17 @@ type Reservation = {
   service: string;
   appointment_time: string;
   duration_minutes: number;
+  business_id: number;
 };
 
 type BusinessHour = {
   id: number;
   day_of_week: number;
-  day_name: string;
+  day_name?: string | null;
   is_open: boolean;
   open_time: string | null;
   close_time: string | null;
+  business_id: number;
 };
 
 type Service = {
@@ -32,11 +30,13 @@ type Service = {
   is_active: boolean;
   sort_order: number;
   duration_minutes: number;
+  business_id: number;
 };
 
-type BusinessSettings = {
+type Business = {
   id: number;
-  business_name: string;
+  name: string;
+  slug: string;
 };
 
 const SLOT_INTERVAL_MINUTES = 15;
@@ -44,94 +44,64 @@ const SLOT_INTERVAL_MINUTES = 15;
 export default function AdminPage() {
   const router = useRouter();
 
-  const [reservations, setReservations] =
-    useState<Reservation[]>([]);
+  const [businessId, setBusinessId] = useState<number | null>(null);
+  const [businessSlug, setBusinessSlug] = useState("");
+  const [businessName, setBusinessName] = useState("");
 
-  const [businessHours, setBusinessHours] =
-    useState<BusinessHour[]>([]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [businessHours, setBusinessHours] = useState<BusinessHour[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
 
-  const [services, setServices] =
-    useState<Service[]>([]);
+  const [newServiceName, setNewServiceName] = useState("");
+  const [newServiceDuration, setNewServiceDuration] = useState(60);
+  const [savingServiceId, setSavingServiceId] = useState<number | null>(null);
+  const [addingService, setAddingService] = useState(false);
 
-  const [newServiceName, setNewServiceName] =
-    useState("");
+  const [savingBusinessName, setSavingBusinessName] = useState(false);
 
-  const [
-    newServiceDuration,
-    setNewServiceDuration,
-  ] = useState(60);
+  const [selectedDate, setSelectedDate] = useState("");
+  const [currentMonth, setCurrentMonth] = useState(new Date());
 
-  const [
-    savingServiceId,
-    setSavingServiceId,
-  ] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [message, setMessage] = useState("");
 
-  const [addingService, setAddingService] =
-    useState(false);
-
-  const [
-    businessSettingsId,
-    setBusinessSettingsId,
-  ] = useState<number | null>(null);
-
-  const [businessName, setBusinessName] =
-    useState("Moja prevádzka");
-
-  const [
-    savingBusinessName,
-    setSavingBusinessName,
-  ] = useState(false);
-
-  const [selectedDate, setSelectedDate] =
-    useState("");
-
-  const [currentMonth, setCurrentMonth] =
-    useState(new Date());
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [checkingAuth, setCheckingAuth] =
-    useState(true);
-
-  const [message, setMessage] =
-    useState("");
-
-  const [manualName, setManualName] =
-    useState("");
-
-  const [manualPhone, setManualPhone] =
-    useState("");
-
-  const [manualService, setManualService] =
-    useState("");
-
-  const [manualDate, setManualDate] =
-    useState("");
-
-  const [manualTime, setManualTime] =
-    useState("");
-
-  const [
-    addingReservation,
-    setAddingReservation,
-  ] = useState(false);
+  const [manualName, setManualName] = useState("");
+  const [manualPhone, setManualPhone] = useState("");
+  const [manualService, setManualService] = useState("");
+  const [manualDate, setManualDate] = useState("");
+  const [manualTime, setManualTime] = useState("");
+  const [addingReservation, setAddingReservation] = useState(false);
 
   useEffect(() => {
     checkLogin();
   }, []);
 
+  function getDayName(dayNumber: number) {
+    const names: Record<number, string> = {
+      1: "Pondelok",
+      2: "Utorok",
+      3: "Streda",
+      4: "Štvrtok",
+      5: "Piatok",
+      6: "Sobota",
+      7: "Nedeľa",
+      0: "Nedeľa",
+    };
+
+    return names[dayNumber] ?? `Deň ${dayNumber}`;
+  }
+
   async function checkLogin() {
+    setCheckingAuth(true);
+
     const {
       data: { session },
       error,
     } = await supabase.auth.getSession();
 
     if (error) {
-      console.error(
-        "AUTH ERROR:",
-        error
-      );
+      console.error("AUTH ERROR:", error);
     }
 
     if (!session) {
@@ -139,22 +109,89 @@ export default function AdminPage() {
       return;
     }
 
+    const { data: businessData, error: businessError } = await supabase
+      .from("businesses")
+      .select("id, name, slug")
+      .eq("owner_id", session.user.id)
+      .order("id", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (businessError) {
+      console.error("BUSINESS ERROR:", businessError);
+
+      setMessage(
+        "Nepodarilo sa načítať prevádzku: " + businessError.message
+      );
+
+      setCheckingAuth(false);
+      setLoading(false);
+      return;
+    }
+
+    if (!businessData) {
+      setMessage(
+        "K tomuto účtu zatiaľ nie je priradená žiadna prevádzka."
+      );
+
+      setCheckingAuth(false);
+      setLoading(false);
+      return;
+    }
+
+    const business = businessData as Business;
+
+    setBusinessId(business.id);
+    setBusinessName(business.name);
+    setBusinessSlug(business.slug);
+
     setCheckingAuth(false);
 
-    await loadData();
+    await loadData(business.id);
   }
 
-  async function loadData() {
-    setLoading(true);
-    setMessage("");
+  async function loadData(forBusinessId?: number) {
+    const targetBusinessId = forBusinessId ?? businessId;
 
-    const reservationsResult =
-      await supabase
-        .from("reservations")
-        .select("*")
-        .order("appointment_time", {
-          ascending: true,
-        });
+    if (!targetBusinessId) {
+      return;
+    }
+
+    setLoading(true);
+
+    const [reservationsResult, hoursResult, servicesResult] =
+      await Promise.all([
+        supabase
+          .from("reservations")
+          .select(
+            "id, customer_name, customer_phone, service, appointment_time, duration_minutes, business_id"
+          )
+          .eq("business_id", targetBusinessId)
+          .order("appointment_time", {
+            ascending: true,
+          }),
+
+        supabase
+          .from("business_hours")
+          .select("*")
+          .eq("business_id", targetBusinessId)
+          .order("day_of_week", {
+            ascending: true,
+          }),
+
+        supabase
+          .from("services")
+          .select(
+            "id, name, is_active, sort_order, duration_minutes, business_id"
+          )
+          .eq("business_id", targetBusinessId)
+          .order("sort_order", {
+            ascending: true,
+          })
+          .order("id", {
+            ascending: true,
+          }),
+      ]);
 
     if (reservationsResult.error) {
       console.error(
@@ -168,17 +205,9 @@ export default function AdminPage() {
       );
     } else {
       setReservations(
-        reservationsResult.data ?? []
+        (reservationsResult.data ?? []) as Reservation[]
       );
     }
-
-    const hoursResult =
-      await supabase
-        .from("business_hours")
-        .select("*")
-        .order("day_of_week", {
-          ascending: true,
-        });
 
     if (hoursResult.error) {
       console.error(
@@ -192,22 +221,9 @@ export default function AdminPage() {
       );
     } else {
       setBusinessHours(
-        hoursResult.data ?? []
+        (hoursResult.data ?? []) as BusinessHour[]
       );
     }
-
-    const servicesResult =
-      await supabase
-        .from("services")
-        .select(
-          "id, name, is_active, sort_order, duration_minutes"
-        )
-        .order("sort_order", {
-          ascending: true,
-        })
-        .order("id", {
-          ascending: true,
-        });
 
     if (servicesResult.error) {
       console.error(
@@ -221,130 +237,54 @@ export default function AdminPage() {
       );
     } else {
       const loadedServices =
-        servicesResult.data ?? [];
+        (servicesResult.data ?? []) as Service[];
 
       setServices(loadedServices);
 
-      setManualService(
-        (current) => {
-          const activeServices =
-            loadedServices.filter(
-              (service) =>
-                service.is_active
-            );
+      setManualService((current) => {
+        const activeServices = loadedServices.filter(
+          (service) => service.is_active
+        );
 
-          const currentStillExists =
-            activeServices.some(
-              (service) =>
-                service.name ===
-                current
-            );
-
-          if (
-            current &&
-            currentStillExists
-          ) {
-            return current;
-          }
-
-          return (
-            activeServices[0]?.name ??
-            ""
+        const currentStillExists =
+          activeServices.some(
+            (service) =>
+              service.name === current
           );
+
+        if (current && currentStillExists) {
+          return current;
         }
-      );
-    }
 
-    const settingsResult =
-      await supabase
-        .from("business_settings")
-        .select(
-          "id, business_name"
-        )
-        .order("id", {
-          ascending: true,
-        })
-        .limit(1)
-        .maybeSingle();
-
-    if (settingsResult.error) {
-      console.error(
-        "BUSINESS SETTINGS ERROR:",
-        settingsResult.error
-      );
-
-      setMessage(
-        "Chyba pri načítaní nastavenia prevádzky: " +
-          settingsResult.error.message
-      );
-    } else if (
-      settingsResult.data
-    ) {
-      const settings =
-        settingsResult.data as BusinessSettings;
-
-      setBusinessSettingsId(
-        settings.id
-      );
-
-      setBusinessName(
-        settings.business_name ||
-          "Moja prevádzka"
-      );
+        return activeServices[0]?.name ?? "";
+      });
     }
 
     setLoading(false);
   }
 
   async function saveBusinessName() {
-    const trimmedName =
-      businessName.trim();
+    if (!businessId) {
+      setMessage("Prevádzka nie je načítaná.");
+      return;
+    }
+
+    const trimmedName = businessName.trim();
 
     if (!trimmedName) {
-      setMessage(
-        "Zadajte názov prevádzky."
-      );
+      setMessage("Zadajte názov prevádzky.");
       return;
     }
 
     setSavingBusinessName(true);
     setMessage("");
 
-    let error = null;
-
-    if (businessSettingsId) {
-      const result =
-        await supabase
-          .from("business_settings")
-          .update({
-            business_name:
-              trimmedName,
-          })
-          .eq(
-            "id",
-            businessSettingsId
-          );
-
-      error = result.error;
-    } else {
-      const result =
-        await supabase
-          .from("business_settings")
-          .insert({
-            business_name:
-              trimmedName,
-          })
-          .select("id")
-          .single();
-
-      error = result.error;
-
-      if (result.data) {
-        setBusinessSettingsId(
-          result.data.id
-        );
-      }
-    }
+    const { error } = await supabase
+      .from("businesses")
+      .update({
+        name: trimmedName,
+      })
+      .eq("id", businessId);
 
     if (error) {
       setMessage(
@@ -369,27 +309,27 @@ export default function AdminPage() {
     await supabase.auth.signOut();
 
     router.replace("/admin/login");
-
     router.refresh();
   }
 
-  async function deleteReservation(
-    id: number
-  ) {
-    const confirmed =
-      window.confirm(
-        "Naozaj chcete zrušiť túto rezerváciu?"
-      );
+  async function deleteReservation(id: number) {
+    if (!businessId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Naozaj chcete zrušiť túto rezerváciu?"
+    );
 
     if (!confirmed) {
       return;
     }
 
-    const { error } =
-      await supabase
-        .from("reservations")
-        .delete()
-        .eq("id", id);
+    const { error } = await supabase
+      .from("reservations")
+      .delete()
+      .eq("id", id)
+      .eq("business_id", businessId);
 
     if (error) {
       setMessage(
@@ -402,9 +342,7 @@ export default function AdminPage() {
 
     await loadData();
 
-    setMessage(
-      "Rezervácia bola zrušená."
-    );
+    setMessage("Rezervácia bola zrušená.");
   }
 
   function updateBusinessHour(
@@ -412,43 +350,40 @@ export default function AdminPage() {
     field: keyof BusinessHour,
     value: string | boolean
   ) {
-    setBusinessHours(
-      (current) => {
-        const copy = [...current];
+    setBusinessHours((current) => {
+      const copy = [...current];
 
-        copy[index] = {
-          ...copy[index],
-          [field]: value,
-        };
+      copy[index] = {
+        ...copy[index],
+        [field]: value,
+      };
 
-        return copy;
-      }
-    );
+      return copy;
+    });
   }
 
   async function saveBusinessHour(
     item: BusinessHour
   ) {
-    const { error } =
-      await supabase
-        .from("business_hours")
-        .update({
-          is_open: item.is_open,
+    if (!businessId) {
+      return;
+    }
 
-          open_time:
-            item.is_open
-              ? item.open_time
-              : null,
+    const { error } = await supabase
+      .from("business_hours")
+      .update({
+        is_open: item.is_open,
 
-          close_time:
-            item.is_open
-              ? item.close_time
-              : null,
-        })
-        .eq(
-          "day_of_week",
-          item.day_of_week
-        );
+        open_time: item.is_open
+          ? item.open_time
+          : null,
+
+        close_time: item.is_open
+          ? item.close_time
+          : null,
+      })
+      .eq("id", item.id)
+      .eq("business_id", businessId);
 
     if (error) {
       setMessage(
@@ -462,7 +397,9 @@ export default function AdminPage() {
     await loadData();
 
     setMessage(
-      `${item.day_name} bol uložený.`
+      `${getDayName(
+        Number(item.day_of_week)
+      )} bol uložený.`
     );
   }
 
@@ -470,42 +407,35 @@ export default function AdminPage() {
     index: number,
     value: string
   ) {
-    setServices(
-      (current) => {
-        const copy = [...current];
+    setServices((current) => {
+      const copy = [...current];
 
-        copy[index] = {
-          ...copy[index],
-          name: value,
-        };
+      copy[index] = {
+        ...copy[index],
+        name: value,
+      };
 
-        return copy;
-      }
-    );
+      return copy;
+    });
   }
 
   function updateServiceDuration(
     index: number,
     value: number
   ) {
-    setServices(
-      (current) => {
-        const copy = [...current];
+    setServices((current) => {
+      const copy = [...current];
 
-        copy[index] = {
-          ...copy[index],
-          duration_minutes:
-            value,
-        };
+      copy[index] = {
+        ...copy[index],
+        duration_minutes: value,
+      };
 
-        return copy;
-      }
-    );
+      return copy;
+    });
   }
 
-  function durationIsValid(
-    duration: number
-  ) {
+  function durationIsValid(duration: number) {
     return (
       Number.isFinite(duration) &&
       duration >= 15 &&
@@ -514,24 +444,26 @@ export default function AdminPage() {
   }
 
   async function addService() {
-    const trimmedName =
-      newServiceName.trim();
+    if (!businessId) {
+      setMessage("Prevádzka nie je načítaná.");
+      return;
+    }
+
+    const trimmedName = newServiceName.trim();
 
     if (!trimmedName) {
       setMessage(
         "Zadajte názov novej služby."
       );
+
       return;
     }
 
-    if (
-      !durationIsValid(
-        newServiceDuration
-      )
-    ) {
+    if (!durationIsValid(newServiceDuration)) {
       setMessage(
         "Dĺžka služby musí byť aspoň 15 minút a musí byť násobkom 15 minút."
       );
+
       return;
     }
 
@@ -550,17 +482,16 @@ export default function AdminPage() {
             )
           ) + 1;
 
-    const { error } =
-      await supabase
-        .from("services")
-        .insert({
-          name: trimmedName,
-          is_active: true,
-          sort_order:
-            nextSortOrder,
-          duration_minutes:
-            newServiceDuration,
-        });
+    const { error } = await supabase
+      .from("services")
+      .insert({
+        business_id: businessId,
+        name: trimmedName,
+        is_active: true,
+        sort_order: nextSortOrder,
+        duration_minutes:
+          newServiceDuration,
+      });
 
     if (error) {
       setMessage(
@@ -587,13 +518,17 @@ export default function AdminPage() {
   async function saveService(
     service: Service
   ) {
-    const trimmedName =
-      service.name.trim();
+    if (!businessId) {
+      return;
+    }
+
+    const trimmedName = service.name.trim();
 
     if (!trimmedName) {
       setMessage(
         "Názov služby nemôže byť prázdny."
       );
+
       return;
     }
 
@@ -605,31 +540,24 @@ export default function AdminPage() {
       setMessage(
         "Dĺžka služby musí byť aspoň 15 minút a musí byť násobkom 15 minút."
       );
+
       return;
     }
 
-    setSavingServiceId(
-      service.id
-    );
-
+    setSavingServiceId(service.id);
     setMessage("");
 
-    const { error } =
-      await supabase
-        .from("services")
-        .update({
-          name: trimmedName,
-
-          sort_order:
-            service.sort_order,
-
-          duration_minutes:
-            service.duration_minutes,
-        })
-        .eq(
-          "id",
-          service.id
-        );
+    const { error } = await supabase
+      .from("services")
+      .update({
+        name: trimmedName,
+        sort_order:
+          service.sort_order,
+        duration_minutes:
+          service.duration_minutes,
+      })
+      .eq("id", service.id)
+      .eq("business_id", businessId);
 
     if (error) {
       setMessage(
@@ -653,26 +581,23 @@ export default function AdminPage() {
   async function toggleService(
     service: Service
   ) {
-    setSavingServiceId(
-      service.id
-    );
+    if (!businessId) {
+      return;
+    }
 
+    setSavingServiceId(service.id);
     setMessage("");
 
     const newValue =
       !service.is_active;
 
-    const { error } =
-      await supabase
-        .from("services")
-        .update({
-          is_active:
-            newValue,
-        })
-        .eq(
-          "id",
-          service.id
-        );
+    const { error } = await supabase
+      .from("services")
+      .update({
+        is_active: newValue,
+      })
+      .eq("id", service.id)
+      .eq("business_id", businessId);
 
     if (error) {
       setMessage(
@@ -698,29 +623,26 @@ export default function AdminPage() {
   async function deleteService(
     service: Service
   ) {
-    const confirmed =
-      window.confirm(
-        `Naozaj chcete vymazať službu "${service.name}"? Staré rezervácie zostanú zachované.`
-      );
+    if (!businessId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Naozaj chcete vymazať službu "${service.name}"? Staré rezervácie zostanú zachované.`
+    );
 
     if (!confirmed) {
       return;
     }
 
-    setSavingServiceId(
-      service.id
-    );
-
+    setSavingServiceId(service.id);
     setMessage("");
 
-    const { error } =
-      await supabase
-        .from("services")
-        .delete()
-        .eq(
-          "id",
-          service.id
-        );
+    const { error } = await supabase
+      .from("services")
+      .delete()
+      .eq("id", service.id)
+      .eq("business_id", businessId);
 
     if (error) {
       setMessage(
@@ -741,21 +663,16 @@ export default function AdminPage() {
     setSavingServiceId(null);
   }
 
-  function formatDate(
-    date: Date
-  ) {
-    const year =
-      date.getFullYear();
+  function formatDate(date: Date) {
+    const year = date.getFullYear();
 
-    const month =
-      String(
-        date.getMonth() + 1
-      ).padStart(2, "0");
+    const month = String(
+      date.getMonth() + 1
+    ).padStart(2, "0");
 
-    const day =
-      String(
-        date.getDate()
-      ).padStart(2, "0");
+    const day = String(
+      date.getDate()
+    ).padStart(2, "0");
 
     return `${year}-${month}-${day}`;
   }
@@ -795,20 +712,16 @@ export default function AdminPage() {
       return 0;
     }
 
-    const [
-      year,
-      month,
-      day,
-    ] = dateValue
-      .split("-")
-      .map(Number);
+    const [year, month, day] =
+      dateValue
+        .split("-")
+        .map(Number);
 
-    const jsDay =
-      new Date(
-        year,
-        month - 1,
-        day
-      ).getDay();
+    const jsDay = new Date(
+      year,
+      month - 1,
+      day
+    ).getDay();
 
     return jsDay === 0
       ? 7
@@ -818,38 +731,27 @@ export default function AdminPage() {
   function timeToMinutes(
     time: string
   ) {
-    const [
-      hours,
-      minutes,
-    ] = time
+    const [hours, minutes] = time
       .slice(0, 5)
       .split(":")
       .map(Number);
 
-    return (
-      hours * 60 + minutes
-    );
+    return hours * 60 + minutes;
   }
 
   function minutesToTime(
     minutes: number
   ) {
-    const hours =
-      Math.floor(
-        minutes / 60
-      );
+    const hours = Math.floor(
+      minutes / 60
+    );
 
-    const mins =
-      minutes % 60;
+    const mins = minutes % 60;
 
-    return `${String(
-      hours
-    ).padStart(
+    return `${String(hours).padStart(
       2,
       "0"
-    )}:${String(
-      mins
-    ).padStart(
+    )}:${String(mins).padStart(
       2,
       "0"
     )}`;
@@ -858,15 +760,16 @@ export default function AdminPage() {
   function reservationStartMinutes(
     reservation: Reservation
   ) {
-    const date =
-      new Date(
-        reservation.appointment_time
+    const normalized =
+      reservation.appointment_time.replace(
+        "T",
+        " "
       );
 
-    return (
-      date.getHours() * 60 +
-      date.getMinutes()
-    );
+    const timePart =
+      normalized.substring(11, 16);
+
+    return timeToMinutes(timePart);
   }
 
   const selectedManualService =
@@ -900,10 +803,21 @@ export default function AdminPage() {
 
       return (
         businessHours.find(
-          (item) =>
-            Number(
-              item.day_of_week
-            ) === dayNumber
+          (item) => {
+            const itemDay =
+              Number(
+                item.day_of_week
+              );
+
+            if (dayNumber === 7) {
+              return (
+                itemDay === 7 ||
+                itemDay === 0
+              );
+            }
+
+            return itemDay === dayNumber;
+          }
         ) ?? null
       );
     }, [
@@ -937,20 +851,19 @@ export default function AdminPage() {
       const reservationsForDay =
         reservations.filter(
           (reservation) =>
-            reservation.appointment_time.slice(
-              0,
-              10
-            ) === manualDate
+            reservation.appointment_time
+              .replace("T", " ")
+              .slice(0, 10) ===
+            manualDate
         );
 
-      const result: string[] =
-        [];
+      const result: string[] = [];
 
       for (
         let minutes = start;
         minutes +
             manualServiceDuration <=
-          end;
+        end;
         minutes +=
           SLOT_INTERVAL_MINUTES
       ) {
@@ -989,9 +902,7 @@ export default function AdminPage() {
 
         if (!overlaps) {
           result.push(
-            minutesToTime(
-              minutes
-            )
+            minutesToTime(minutes)
           );
         }
       }
@@ -1010,6 +921,13 @@ export default function AdminPage() {
       return;
     }
 
+    if (!businessId) {
+      setMessage(
+        "Prevádzka nie je načítaná."
+      );
+      return;
+    }
+
     setMessage("");
 
     if (!manualName.trim()) {
@@ -1019,9 +937,7 @@ export default function AdminPage() {
       return;
     }
 
-    if (
-      !manualPhone.trim()
-    ) {
+    if (!manualPhone.trim()) {
       setMessage(
         "Zadajte telefón zákazníka."
       );
@@ -1029,9 +945,7 @@ export default function AdminPage() {
     }
 
     if (!manualService) {
-      setMessage(
-        "Vyberte službu."
-      );
+      setMessage("Vyberte službu.");
       return;
     }
 
@@ -1082,10 +996,7 @@ export default function AdminPage() {
         manualBusinessHour.close_time
       );
 
-    if (
-      selectedEnd >
-      closingTime
-    ) {
+    if (selectedEnd > closingTime) {
       setMessage(
         "Táto služba by skončila až po zatvorení prevádzky."
       );
@@ -1096,13 +1007,17 @@ export default function AdminPage() {
 
     try {
       const {
-        data:
-          latestReservations,
-        error:
-          latestError,
+        data: latestReservations,
+        error: latestError,
       } = await supabase
         .from("reservations")
-        .select("*");
+        .select(
+          "id, customer_name, customer_phone, service, appointment_time, duration_minutes, business_id"
+        )
+        .eq(
+          "business_id",
+          businessId
+        );
 
       if (latestError) {
         setMessage(
@@ -1113,47 +1028,43 @@ export default function AdminPage() {
         return;
       }
 
-      const alreadyBooked =
+      const alreadyBooked = (
+        latestReservations ?? []
+      ).some(
         (
-          latestReservations ??
-          []
-        ).some(
-          (
-            reservation:
-              Reservation
-          ) => {
-            if (
-              reservation.appointment_time.slice(
-                0,
-                10
-              ) !==
-              manualDate
-            ) {
-              return false;
-            }
-
-            const existingStart =
-              reservationStartMinutes(
-                reservation
-              );
-
-            const existingDuration =
-              Number(
-                reservation.duration_minutes
-              ) || 60;
-
-            const existingEnd =
-              existingStart +
-              existingDuration;
-
-            return (
-              selectedStart <
-                existingEnd &&
-              selectedEnd >
-                existingStart
-            );
+          reservation: Reservation
+        ) => {
+          if (
+            reservation.appointment_time
+              .replace("T", " ")
+              .slice(0, 10) !==
+            manualDate
+          ) {
+            return false;
           }
-        );
+
+          const existingStart =
+            reservationStartMinutes(
+              reservation
+            );
+
+          const existingDuration =
+            Number(
+              reservation.duration_minutes
+            ) || 60;
+
+          const existingEnd =
+            existingStart +
+            existingDuration;
+
+          return (
+            selectedStart <
+              existingEnd &&
+            selectedEnd >
+              existingStart
+          );
+        }
+      );
 
       if (alreadyBooked) {
         setMessage(
@@ -1175,6 +1086,9 @@ export default function AdminPage() {
       } = await supabase
         .from("reservations")
         .insert({
+          business_id:
+            businessId,
+
           customer_name:
             manualName.trim(),
 
@@ -1240,8 +1154,7 @@ export default function AdminPage() {
     setCurrentMonth(
       new Date(
         currentMonth.getFullYear(),
-        currentMonth.getMonth() -
-          1,
+        currentMonth.getMonth() - 1,
         1
       )
     );
@@ -1251,16 +1164,14 @@ export default function AdminPage() {
     setCurrentMonth(
       new Date(
         currentMonth.getFullYear(),
-        currentMonth.getMonth() +
-          1,
+        currentMonth.getMonth() + 1,
         1
       )
     );
   }
 
   function goToday() {
-    const today =
-      new Date();
+    const today = new Date();
 
     setCurrentMonth(
       new Date(
@@ -1283,10 +1194,10 @@ export default function AdminPage() {
       return reservations
         .filter(
           (reservation) =>
-            reservation.appointment_time.slice(
-              0,
-              10
-            ) === todayString
+            reservation.appointment_time
+              .replace("T", " ")
+              .slice(0, 10) ===
+            todayString
         )
         .sort(
           (a, b) =>
@@ -1341,8 +1252,7 @@ export default function AdminPage() {
       }
 
       const days:
-        Array<Date | null> =
-        [];
+        Array<Date | null> = [];
 
       for (
         let i = 1;
@@ -1354,8 +1264,7 @@ export default function AdminPage() {
 
       for (
         let day = 1;
-        day <=
-        lastDay.getDate();
+        day <= lastDay.getDate();
         day++
       ) {
         days.push(
@@ -1379,10 +1288,10 @@ export default function AdminPage() {
       return reservations
         .filter(
           (reservation) =>
-            reservation.appointment_time.slice(
-              0,
-              10
-            ) === selectedDate
+            reservation.appointment_time
+              .replace("T", " ")
+              .slice(0, 10) ===
+            selectedDate
         )
         .sort(
           (a, b) =>
@@ -1406,10 +1315,10 @@ export default function AdminPage() {
 
     return reservations.filter(
       (reservation) =>
-        reservation.appointment_time.slice(
-          0,
-          10
-        ) === dateString
+        reservation.appointment_time
+          .replace("T", " ")
+          .slice(0, 10) ===
+        dateString
     ).length;
   }
 
@@ -1419,6 +1328,50 @@ export default function AdminPage() {
         <p className="text-lg font-semibold text-gray-700">
           Kontrolujem prihlásenie...
         </p>
+      </main>
+    );
+  }
+
+  if (!businessId) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+        <div className="w-full max-w-xl rounded-2xl bg-white p-8 text-center shadow-sm">
+          <h1 className="text-3xl font-bold text-gray-900">
+            Prevádzka nebola nájdená
+          </h1>
+
+          <p className="mt-4 text-gray-600">
+            K tomuto účtu zatiaľ nie je priradená prevádzka.
+          </p>
+
+          {message && (
+            <div className="mt-4 rounded-xl bg-red-50 p-4 text-red-700">
+              {message}
+            </div>
+          )}
+
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  "/admin/register"
+                )
+              }
+              className="rounded-xl bg-black px-6 py-3 font-bold text-white"
+            >
+              Registrácia prevádzky
+            </button>
+
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-xl border px-6 py-3 font-bold"
+            >
+              Odhlásiť
+            </button>
+          </div>
+        </div>
       </main>
     );
   }
@@ -1438,10 +1391,12 @@ export default function AdminPage() {
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={loadData}
+              onClick={() =>
+                loadData()
+              }
               className="rounded-xl border bg-white px-4 py-3 font-semibold"
             >
               Obnoviť
@@ -1465,13 +1420,29 @@ export default function AdminPage() {
 
         <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
           <h2 className="text-2xl font-bold text-gray-900">
+            🔗 Zákaznícky link
+          </h2>
+
+          <p className="mt-2 text-gray-500">
+            Toto bude verejný rezervačný link tejto prevádzky.
+          </p>
+
+          <div className="mt-4 rounded-xl bg-gray-100 p-4 font-mono font-semibold text-gray-900">
+            /b/{businessSlug}
+          </div>
+
+          <p className="mt-3 text-sm text-gray-500">
+            Verejnú stránku pre tento link vytvoríme v ďalšom kroku.
+          </p>
+        </section>
+
+        <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
+          <h2 className="text-2xl font-bold text-gray-900">
             🏢 Nastavenie prevádzky
           </h2>
 
           <p className="mt-2 text-gray-500">
-            Nastavte názov firmy alebo
-            prevádzky, ktorý sa zobrazuje
-            zákazníkom.
+            Názov je teraz uložený priamo pri vašej prevádzke.
           </p>
 
           <div className="mt-6 flex flex-col gap-3 md:flex-row">
@@ -1528,11 +1499,9 @@ export default function AdminPage() {
             )}
           </p>
 
-          {todayReservations.length ===
-          0 ? (
+          {todayReservations.length === 0 ? (
             <div className="mt-6 rounded-xl bg-gray-50 p-5 text-gray-500">
-              Na dnes nie sú žiadne
-              rezervácie.
+              Na dnes nie sú žiadne rezervácie.
             </div>
           ) : (
             <div className="mt-6 space-y-3">
@@ -1600,8 +1569,7 @@ export default function AdminPage() {
           </h2>
 
           <p className="mt-2 text-gray-500">
-            Manuálne vytvorenie rezervácie
-            pre zákazníka.
+            Manuálne vytvorenie rezervácie pre zákazníka.
           </p>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -1619,7 +1587,7 @@ export default function AdminPage() {
                   )
                 }
                 placeholder="Ján Novák"
-                className="w-full rounded-xl border p-3"
+                className="w-full rounded-xl border bg-white p-3 text-gray-900"
               />
             </div>
 
@@ -1637,7 +1605,7 @@ export default function AdminPage() {
                   )
                 }
                 placeholder="+421..."
-                className="w-full rounded-xl border p-3"
+                className="w-full rounded-xl border bg-white p-3 text-gray-900"
               />
             </div>
 
@@ -1655,7 +1623,7 @@ export default function AdminPage() {
 
                   setManualTime("");
                 }}
-                className="w-full rounded-xl border p-3"
+                className="w-full rounded-xl border bg-white p-3 text-gray-900"
               >
                 <option value="">
                   Vyberte službu
@@ -1712,7 +1680,7 @@ export default function AdminPage() {
 
                   setManualTime("");
                 }}
-                className="w-full rounded-xl border p-3"
+                className="w-full rounded-xl border bg-white p-3 text-gray-900"
               />
             </div>
 
@@ -1734,7 +1702,7 @@ export default function AdminPage() {
                   !manualBusinessHour
                     ?.is_open
                 }
-                className="w-full rounded-xl border p-3 disabled:bg-gray-100"
+                className="w-full rounded-xl border bg-white p-3 text-gray-900 disabled:bg-gray-100"
               >
                 <option value="">
                   Vyberte čas
@@ -1758,8 +1726,7 @@ export default function AdminPage() {
             manualBusinessHour &&
             !manualBusinessHour.is_open && (
               <div className="mt-4 rounded-xl bg-red-50 p-4 font-semibold text-red-700">
-                V tento deň je prevádzka
-                zatvorená.
+                V tento deň je prevádzka zatvorená.
               </div>
             )}
 
@@ -1770,9 +1737,7 @@ export default function AdminPage() {
             manualAvailableTimes.length ===
               0 && (
               <div className="mt-4 rounded-xl bg-yellow-50 p-4 font-semibold">
-                Na tento deň už nie sú
-                voľné termíny pre túto
-                službu.
+                Na tento deň už nie sú voľné termíny pre túto službu.
               </div>
             )}
 
@@ -1798,9 +1763,7 @@ export default function AdminPage() {
           </h2>
 
           <p className="mt-2 text-gray-500">
-            Pridávajte, premenovávajte,
-            nastavujte dĺžku, zapínajte
-            alebo vypínajte služby.
+            Pridávajte, premenovávajte, nastavujte dĺžku, zapínajte alebo vypínajte služby.
           </p>
 
           <div className="mt-6 grid gap-3 md:grid-cols-[1fr_180px_auto]">
@@ -1861,20 +1824,16 @@ export default function AdminPage() {
           </div>
 
           <p className="mt-3 text-sm text-gray-500">
-            Dĺžku nastavuj po 15 minútach,
-            napríklad 30, 45, 60, 90 alebo
-            120 minút.
+            Dĺžku nastavuj po 15 minútach, napríklad 30, 45, 60, 90 alebo 120 minút.
           </p>
 
           {loading ? (
             <p className="mt-6">
               Načítavam služby...
             </p>
-          ) : services.length ===
-            0 ? (
+          ) : services.length === 0 ? (
             <div className="mt-6 rounded-xl bg-gray-50 p-4 text-gray-500">
-              Zatiaľ nie sú vytvorené
-              žiadne služby.
+              Zatiaľ nie sú vytvorené žiadne služby.
             </div>
           ) : (
             <div className="mt-6 space-y-4">
@@ -1933,8 +1892,7 @@ export default function AdminPage() {
                           updateServiceDuration(
                             index,
                             Number(
-                              e.target
-                                .value
+                              e.target.value
                             )
                           )
                         }
@@ -2115,8 +2073,7 @@ export default function AdminPage() {
 
             {!selectedDate && (
               <p className="mt-4 text-gray-500">
-                Kliknite na deň v
-                kalendári.
+                Kliknite na deň v kalendári.
               </p>
             )}
 
@@ -2124,8 +2081,7 @@ export default function AdminPage() {
               selectedReservations.length ===
                 0 && (
                 <p className="mt-4 text-gray-500">
-                  Na tento deň nie sú
-                  rezervácie.
+                  Na tento deň nie sú rezervácie.
                 </p>
               )}
 
@@ -2193,6 +2149,11 @@ export default function AdminPage() {
             <p className="mt-6">
               Načítavam...
             </p>
+          ) : businessHours.length ===
+            0 ? (
+            <div className="mt-6 rounded-xl bg-yellow-50 p-4">
+              Pre túto prevádzku zatiaľ nie sú nastavené pracovné hodiny.
+            </div>
           ) : (
             <div className="mt-6 space-y-4">
               {businessHours.map(
@@ -2202,14 +2163,16 @@ export default function AdminPage() {
                 ) => (
                   <div
                     key={
-                      item.day_of_week
+                      item.id
                     }
                     className="grid gap-4 rounded-xl border p-4 md:grid-cols-5 md:items-center"
                   >
                     <div className="font-bold">
-                      {
-                        item.day_name
-                      }
+                      {getDayName(
+                        Number(
+                          item.day_of_week
+                        )
+                      )}
                     </div>
 
                     <label className="flex items-center gap-2">
@@ -2246,11 +2209,10 @@ export default function AdminPage() {
                         updateBusinessHour(
                           index,
                           "open_time",
-                          e.target
-                            .value
+                          e.target.value
                         )
                       }
-                      className="rounded-lg border p-3 disabled:bg-gray-100"
+                      className="rounded-lg border bg-white p-3 text-gray-900 disabled:bg-gray-100"
                     />
 
                     <input
@@ -2268,11 +2230,10 @@ export default function AdminPage() {
                         updateBusinessHour(
                           index,
                           "close_time",
-                          e.target
-                            .value
+                          e.target.value
                         )
                       }
-                      className="rounded-lg border p-3 disabled:bg-gray-100"
+                      className="rounded-lg border bg-white p-3 text-gray-900 disabled:bg-gray-100"
                     />
 
                     <button

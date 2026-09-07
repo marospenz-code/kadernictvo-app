@@ -128,6 +128,19 @@ export default function AdminLoginPage() {
               />
             </div>
 
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href =
+                    "/admin/forgot-password";
+                }}
+                className="text-sm font-semibold text-gray-700 underline hover:text-black"
+              >
+                Zabudol som heslo
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={login}
@@ -137,6 +150,17 @@ export default function AdminLoginPage() {
               {loading
                 ? "Prihlasujem..."
                 : "Prihlásiť"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href =
+                  "/admin/register";
+              }}
+              className="w-full rounded-xl border border-gray-300 bg-white p-4 font-bold text-gray-900 hover:bg-gray-50"
+            >
+              Vytvoriť nový účet
             </button>
           </div>
 

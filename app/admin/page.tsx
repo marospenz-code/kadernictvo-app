@@ -1424,16 +1424,17 @@ export default function AdminPage() {
           </h2>
 
           <p className="mt-2 text-gray-500">
-            Toto bude verejný rezervačný link tejto prevádzky.
+            Tento link môžete poslať zákazníkom na vytvorenie rezervácie.
           </p>
 
-          <div className="mt-4 rounded-xl bg-gray-100 p-4 font-mono font-semibold text-gray-900">
-            /b/{businessSlug}
-          </div>
-
-          <p className="mt-3 text-sm text-gray-500">
-            Verejnú stránku pre tento link vytvoríme v ďalšom kroku.
-          </p>
+          <a
+            href={`https://kadernictvo-app.vercel.app/b/${businessSlug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 block break-all rounded-xl bg-gray-100 p-4 font-mono font-semibold text-blue-700 underline"
+          >
+            https://kadernictvo-app.vercel.app/b/{businessSlug}
+          </a>
         </section>
 
         <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm">

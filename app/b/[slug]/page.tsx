@@ -46,6 +46,7 @@ type TimeSlot = {
 
 type Confirmation = {
   name: string;
+  email: string;
   service: string;
   date: string;
   time: string;
@@ -93,14 +94,15 @@ export default function BusinessBookingPage() {
   const [
     selectedTime,
     setSelectedTime,
-  ] = useState<TimeSlot | null>(
-    null
-  );
+  ] = useState<TimeSlot | null>(null);
 
   const [name, setName] =
     useState("");
 
   const [phone, setPhone] =
+    useState("");
+
+  const [email, setEmail] =
     useState("");
 
   const [loading, setLoading] =
@@ -143,9 +145,7 @@ export default function BusinessBookingPage() {
       error: businessError,
     } = await supabase
       .from("businesses")
-      .select(
-        "id, name, slug"
-      )
+      .select("id, name, slug")
       .eq("slug", slug)
       .maybeSingle();
 
@@ -514,6 +514,14 @@ export default function BusinessBookingPage() {
     );
   }
 
+  function isValidEmail(
+    value: string
+  ) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+      value
+    );
+  }
+
   const selectedServiceData =
     useMemo(() => {
       return (
@@ -763,9 +771,7 @@ export default function BusinessBookingPage() {
     setMessage("");
     setConfirmation(null);
 
-    if (
-      !business
-    ) {
+    if (!business) {
       setMessage(
         "Prevádzka nie je načítaná."
       );
@@ -822,6 +828,24 @@ export default function BusinessBookingPage() {
     if (!phone.trim()) {
       setMessage(
         "Zadajte telefón."
+      );
+      return;
+    }
+
+    if (!email.trim()) {
+      setMessage(
+        "Zadajte e-mail."
+      );
+      return;
+    }
+
+    if (
+      !isValidEmail(
+        email.trim()
+      )
+    ) {
+      setMessage(
+        "Zadajte platnú e-mailovú adresu."
       );
       return;
     }
@@ -1096,6 +1120,7 @@ export default function BusinessBookingPage() {
       const confirmationData:
         Confirmation = {
           name: name.trim(),
+          email: email.trim(),
           service:
             latestService.name,
           date: selectedDate,
@@ -1119,6 +1144,9 @@ export default function BusinessBookingPage() {
 
             customer_phone:
               phone.trim(),
+
+            customer_email:
+              email.trim(),
 
             service:
               latestService.name,
@@ -1163,12 +1191,72 @@ export default function BusinessBookingPage() {
         return;
       }
 
+      // Po úspešnom uložení rezervácie
+      // odošleme zákazníkovi potvrdzovací e-mail.
+      try {
+        const emailResponse =
+          await fetch(
+            "/api/send-confirmation",
+            {
+              method: "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+
+              body: JSON.stringify({
+                email:
+                  email.trim(),
+
+                customerName:
+                  name.trim(),
+
+                businessName:
+                  business.name,
+
+                service:
+                  latestService.name,
+
+                date:
+                  formatDisplayDate(
+                    selectedDate
+                  ),
+
+                time:
+                  selectedTime.label,
+
+                duration:
+                  currentDuration,
+              }),
+            }
+          );
+
+        if (!emailResponse.ok) {
+          const emailError =
+            await emailResponse
+              .json()
+              .catch(() => null);
+
+          console.error(
+            "EMAIL SEND ERROR:",
+            emailError
+          );
+        }
+      } catch (emailError) {
+        console.error(
+          "EMAIL SEND ERROR:",
+          emailError
+        );
+      }
+
       setConfirmation(
         confirmationData
       );
 
       setName("");
       setPhone("");
+      setEmail("");
       setSelectedService("");
       setSelectedDate("");
       setSelectedTime(null);
@@ -1251,28 +1339,28 @@ export default function BusinessBookingPage() {
                 <strong>
                   Meno:
                 </strong>{" "}
-                {
-                  confirmation.name
-                }
+                {confirmation.name}
+              </p>
+
+              <p>
+                <strong>
+                  E-mail:
+                </strong>{" "}
+                {confirmation.email}
               </p>
 
               <p>
                 <strong>
                   Služba:
                 </strong>{" "}
-                {
-                  confirmation.service
-                }
+                {confirmation.service}
               </p>
 
               <p>
                 <strong>
                   Dĺžka:
                 </strong>{" "}
-                {
-                  confirmation.duration
-                }{" "}
-                min
+                {confirmation.duration} min
               </p>
 
               <p>
@@ -1288,9 +1376,7 @@ export default function BusinessBookingPage() {
                 <strong>
                   Čas:
                 </strong>{" "}
-                {
-                  confirmation.time
-                }
+                {confirmation.time}
               </p>
             </div>
           </section>
@@ -1472,6 +1558,7 @@ export default function BusinessBookingPage() {
                     e.target.value
                   )
                 }
+                autoComplete="name"
                 className="w-full rounded-xl border border-gray-200 bg-white p-4 text-gray-900 placeholder:text-gray-400 outline-none focus:border-black"
               />
 
@@ -1484,6 +1571,20 @@ export default function BusinessBookingPage() {
                     e.target.value
                   )
                 }
+                autoComplete="tel"
+                className="w-full rounded-xl border border-gray-200 bg-white p-4 text-gray-900 placeholder:text-gray-400 outline-none focus:border-black"
+              />
+
+              <input
+                type="email"
+                placeholder="E-mail"
+                value={email}
+                onChange={(e) =>
+                  setEmail(
+                    e.target.value
+                  )
+                }
+                autoComplete="email"
                 className="w-full rounded-xl border border-gray-200 bg-white p-4 text-gray-900 placeholder:text-gray-400 outline-none focus:border-black"
               />
             </div>
